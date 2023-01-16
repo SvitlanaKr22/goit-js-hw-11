@@ -18,6 +18,8 @@ import { Notify } from 'notiflix/build/notiflix-notify-aio';
 
 import { fetchContents } from './fetchcontents';
 import { createMarkUp } from './createmarkup';
+import { smoothScroll } from './smoothscroll';
+import { infiniteScroll } from './infinitscroll';
 
 Notify.init({
   width: '400px',
@@ -31,7 +33,7 @@ Notify.init({
 const THROTLLE_DELAY = 300;
 const NUM_IMG = 40;
 
-const parQuery = {
+export const parQuery = {
   nameQuery: '',
   page: null,
   per_page: NUM_IMG,
@@ -48,7 +50,8 @@ const galleryBox = new SimpleLightbox('.gallery a', {
 const gallery = document.querySelector('.gallery');
 const form = document.querySelector('#search-form');
 
-let isEvtSubit = false;
+let isEvtSubmit;
+let isEvtScroll;
 
 form.addEventListener('submit', onFormSubmit);
 document.addEventListener('scroll', throttle(onWindowScroll, THROTLLE_DELAY));
@@ -56,27 +59,42 @@ document.addEventListener('scroll', throttle(onWindowScroll, THROTLLE_DELAY));
 async function onFormSubmit(evt) {
   evt.preventDefault();
   gallery.innerHTML = '';
-  isEvtSubit = true;
+  isEvtSubmit = true;
+  isEvtScroll = false;
+
   const { searchQuery } = evt.target.elements;
   parQuery.nameQuery = searchQuery.value;
   parQuery.page = 1;
-
   await openGallery();
 }
 
 async function onWindowScroll() {
-  if (isEvtSubit) {
-    isEvtSubit = false;
+  if (isEvtSubmit && !isEvtScroll) {
+    isEvtSubmit = false;
+    isEvtScroll = true;
     return;
   }
-  await infiniteScroll();
+  if (isEvtScroll) await infiniteScroll();
 }
 
-async function openGallery() {
+export async function openGallery() {
   try {
     const {
       data: { hits, totalHits },
     } = await fetchContents(parQuery);
+
+    if (
+      !isEvtSubmit &&
+      isEvtScroll &&
+      totalHits &&
+      parQuery.page * parQuery.per_page >= totalHits
+    ) {
+      Notify.warning(
+        "We're sorry, but you've reached the end of search results."
+      );
+      isEvtScroll = false;
+      return;
+    }
 
     if (!hits.length) {
       Notify.info(
@@ -89,32 +107,11 @@ async function openGallery() {
     galleryBox.refresh();
 
     if (parQuery.page > 1) {
-      smoothScroll();
+      smoothScroll(gallery);
       Notify.success(`Hooray! We found ${totalHits} images.`);
     }
   } catch (error) {
     console.log(error);
     Notify.failure(`Oops!  ${error}`);
-  }
-}
-
-function smoothScroll() {
-  const { height: cardHeight } =
-    gallery.firstElementChild.getBoundingClientRect();
-  window.scrollTo({
-    top: cardHeight * 2,
-    behavior: 'smooth',
-  });
-}
-
-async function infiniteScroll() {
-  const height = document.body.offsetHeight;
-  const screenHeight = window.innerHeight;
-  const scrolled = window.scrollY;
-  const threshold = height - screenHeight / 4;
-  const position = scrolled + screenHeight;
-  if (position >= threshold) {
-    parQuery.page += 1;
-    await openGallery();
   }
 }
