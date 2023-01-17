@@ -52,6 +52,7 @@ const form = document.querySelector('#search-form');
 
 let isEvtSubmit;
 let isEvtScroll;
+let isSearch;
 
 form.addEventListener('submit', onFormSubmit);
 document.addEventListener('scroll', throttle(onWindowScroll, THROTLLE_DELAY));
@@ -59,8 +60,10 @@ document.addEventListener('scroll', throttle(onWindowScroll, THROTLLE_DELAY));
 async function onFormSubmit(evt) {
   evt.preventDefault();
   gallery.innerHTML = '';
+
   isEvtSubmit = true;
   isEvtScroll = false;
+  isSearch = true;
 
   const { searchQuery } = evt.target.elements;
   parQuery.nameQuery = searchQuery.value;
@@ -78,24 +81,22 @@ async function onWindowScroll() {
 }
 
 export async function openGallery() {
+  // достигли конца результатов поиска
+  if (!isSearch) {
+    Notify.warning(
+      "We're sorry, but you've reached the end of search results."
+    );
+    isEvtScroll = false;
+    isEvtSubmit = false;
+    return;
+  }
+
   try {
     const {
       data: { hits, totalHits },
     } = await fetchContents(parQuery);
 
-    if (
-      !isEvtSubmit &&
-      isEvtScroll &&
-      totalHits &&
-      parQuery.page * parQuery.per_page >= totalHits
-    ) {
-      Notify.warning(
-        "We're sorry, but you've reached the end of search results."
-      );
-      isEvtScroll = false;
-      return;
-    }
-
+    // Ничего не найдено
     if (!hits.length) {
       Notify.info(
         'Sorry, there are no images matching your search query. Please try again.'
@@ -110,6 +111,12 @@ export async function openGallery() {
       smoothScroll(gallery);
       Notify.success(`Hooray! We found ${totalHits} images.`);
     }
+
+    // достигли конца результатов поиска
+    console.log('totalHits', totalHits);
+    console.log((parQuery.page - 1) * 40 + hits.length);
+
+    if ((parQuery.page - 1) * 40 + hits.length === totalHits) isSearch = false;
   } catch (error) {
     console.log(error);
     Notify.failure(`Oops!  ${error}`);
